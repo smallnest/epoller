@@ -1,6 +1,8 @@
 # epoller
 epoll implementation for connections in Linux and MacOS.
 
+[![GoDoc](https://godoc.org/github.com/smallnest/epoller?status.png)](http://godoc.org/github.com/smallnest/epoller)
+
 Its target is implementing a simple epoll for connection, so you should see it only contains few methods:
 
 ```go
