@@ -58,9 +58,9 @@ func (e *epoll) Remove(conn net.Conn) error {
 	return nil
 }
 
-func (e *epoll) Wait() ([]net.Conn, error) {
-	events := make([]unix.EpollEvent, 128)
-	n, err := unix.EpollWait(e.fd, events, 128)
+func (e *epoll) Wait(count int) ([]net.Conn, error) {
+	events := make([]unix.EpollEvent, count)
+	n, err := unix.EpollWait(e.fd, events, count)
 	if err != nil {
 		return nil, err
 	}

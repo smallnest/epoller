@@ -58,7 +58,7 @@ func TestPoller(t *testing.T) {
 	var expected = num * msgPerConn * len("hello world")
 	go func() {
 		for {
-			conns, err := poller.Wait()
+			conns, err := poller.Wait(128)
 			if err != nil {
 				t.Fatal(err)
 			}
