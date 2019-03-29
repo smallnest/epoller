@@ -60,7 +60,7 @@ func (e *epoll) Remove(conn net.Conn) error {
 
 func (e *epoll) Wait(count int) ([]net.Conn, error) {
 	events := make([]unix.EpollEvent, count)
-	n, err := unix.EpollWait(e.fd, events, count)
+	n, err := unix.EpollWait(e.fd, events, 1e9)
 	if err != nil {
 		return nil, err
 	}
