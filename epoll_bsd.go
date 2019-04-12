@@ -6,6 +6,7 @@ import (
 	"net"
 	"sync"
 	"syscall"
+	"time"
 )
 
 type epoll struct {
@@ -32,7 +33,7 @@ func NewPoller() (Poller, error) {
 
 	return &epoll{
 		fd:          p,
-		ts:          syscall.NsecToTimespec(0),
+		ts:          syscall.NsecToTimespec(int64(time.Minute)),
 		mu:          &sync.RWMutex{},
 		connections: make(map[int]net.Conn),
 	}, nil
