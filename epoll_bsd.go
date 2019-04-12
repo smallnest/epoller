@@ -32,7 +32,7 @@ func NewPoller() (Poller, error) {
 
 	return &epoll{
 		fd:          p,
-		ts:          syscall.NsecToTimespec(1e9),
+		ts:          syscall.NsecToTimespec(0),
 		mu:          &sync.RWMutex{},
 		connections: make(map[int]net.Conn),
 	}, nil
