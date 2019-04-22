@@ -9,6 +9,7 @@ type Poller interface {
 	Add(conn net.Conn) error
 	Remove(conn net.Conn) error
 	Wait(count int) ([]net.Conn, error)
+	WaitWithBuffer() ([]net.Conn, error)
 	Close() error
 }
 

@@ -14,6 +14,7 @@ type epoll struct {
 	changes     []syscall.Kevent_t
 	connections map[int]net.Conn
 	mu          *sync.RWMutex
+	events      []syscall.Kevent_t
 }
 
 func NewPoller() (Poller, error) {
@@ -35,6 +36,29 @@ func NewPoller() (Poller, error) {
 		ts:          syscall.NsecToTimespec(1e9),
 		mu:          &sync.RWMutex{},
 		connections: make(map[int]net.Conn),
+	}, nil
+}
+
+func NewPollerWithBuffer(count int) (Poller, error) {
+	p, err := syscall.Kqueue()
+	if err != nil {
+		panic(err)
+	}
+	_, err = syscall.Kevent(p, []syscall.Kevent_t{{
+		Ident:  0,
+		Filter: syscall.EVFILT_USER,
+		Flags:  syscall.EV_ADD | syscall.EV_CLEAR,
+	}}, nil, nil)
+	if err != nil {
+		panic(err)
+	}
+
+	return &epoll{
+		fd:          p,
+		ts:          syscall.NsecToTimespec(1e9),
+		mu:          &sync.RWMutex{},
+		connections: make(map[int]net.Conn),
+		events:      make([]syscall.Kevent_t, count, count),
 	}, nil
 }
 
@@ -87,7 +111,7 @@ func (e *epoll) Remove(conn net.Conn) error {
 }
 
 func (e *epoll) Wait(count int) ([]net.Conn, error) {
-	events := make([]syscall.Kevent_t, count)
+	events := make([]syscall.Kevent_t, count, count)
 
 	e.mu.RLock()
 	changes := e.changes
@@ -99,11 +123,32 @@ func (e *epoll) Wait(count int) ([]net.Conn, error) {
 	}
 
 	e.mu.RLock()
-	defer e.mu.RUnlock()
 	var connections []net.Conn
 	for i := 0; i < n; i++ {
 		conn := e.connections[int(events[i].Ident)]
 		connections = append(connections, conn)
 	}
+	e.mu.RUnlock()
+
+	return connections, nil
+}
+
+func (e *epoll) WaitWithBuffer() ([]net.Conn, error) {
+	e.mu.RLock()
+	changes := e.changes
+	e.mu.RUnlock()
+
+	n, err := syscall.Kevent(e.fd, changes, e.events, &e.ts)
+	if err != nil && err != syscall.EINTR {
+		return nil, err
+	}
+
+	e.mu.RLock()
+	var connections []net.Conn
+	for i := 0; i < n; i++ {
+		conn := e.connections[int(e.events[i].Ident)]
+		connections = append(connections, conn)
+	}
+	e.mu.RUnlock()
 	return connections, nil
 }
