@@ -14,6 +14,7 @@ type epoll struct {
 	fd          int
 	connections map[int]net.Conn
 	lock        *sync.RWMutex
+	connbuf     []net.Conn
 	events      []unix.EpollEvent
 }
 
@@ -26,6 +27,7 @@ func NewPoller() (Poller, error) {
 		fd:          fd,
 		lock:        &sync.RWMutex{},
 		connections: make(map[int]net.Conn),
+		connbuf:     make([]net.Conn, 128, 128),
 		events:      make([]unix.EpollEvent, 128, 128),
 	}, nil
 }
@@ -39,6 +41,7 @@ func NewPollerWithBuffer(count int) (Poller, error) {
 		fd:          fd,
 		lock:        &sync.RWMutex{},
 		connections: make(map[int]net.Conn),
+		connbuf:     make([]net.Conn, count, count),
 		events:      make([]unix.EpollEvent, count, count),
 	}, nil
 }
@@ -80,8 +83,9 @@ func (e *epoll) Wait(count int) ([]net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	var connections = make([]net.Conn, 0, n)
 	e.lock.RLock()
-	var connections []net.Conn
 	for i := 0; i < n; i++ {
 		conn := e.connections[int(events[i].Fd)]
 		connections = append(connections, conn)
@@ -96,8 +100,9 @@ func (e *epoll) WaitWithBuffer() ([]net.Conn, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	var connections = e.connbuf[:0]
 	e.lock.RLock()
-	var connections []net.Conn
 	for i := 0; i < n; i++ {
 		conn := e.connections[int(e.events[i].Fd)]
 		connections = append(connections, conn)
