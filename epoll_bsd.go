@@ -14,6 +14,7 @@ type epoll struct {
 	changes     []syscall.Kevent_t
 	connections map[int]net.Conn
 	mu          *sync.RWMutex
+	connbuf     []net.Conn
 	events      []syscall.Kevent_t
 }
 
@@ -35,6 +36,8 @@ func NewPoller() (Poller, error) {
 		fd:          p,
 		ts:          syscall.NsecToTimespec(1e9),
 		mu:          &sync.RWMutex{},
+		connbuf:     make([]net.Conn, 128, 128),
+		events:      make([]syscall.Kevent_t, 128, 128),
 		connections: make(map[int]net.Conn),
 	}, nil
 }
@@ -58,6 +61,7 @@ func NewPollerWithBuffer(count int) (Poller, error) {
 		ts:          syscall.NsecToTimespec(1e9),
 		mu:          &sync.RWMutex{},
 		connections: make(map[int]net.Conn),
+		connbuf:     make([]net.Conn, count, count),
 		events:      make([]syscall.Kevent_t, count, count),
 	}, nil
 }
@@ -143,7 +147,7 @@ func (e *epoll) WaitWithBuffer() ([]net.Conn, error) {
 		return nil, err
 	}
 
-	var connections = make([]net.Conn, 0, n)
+	var connections = e.connbuf[:0]
 	e.mu.RLock()
 	for i := 0; i < n; i++ {
 		conn := e.connections[int(e.events[i].Ident)]
