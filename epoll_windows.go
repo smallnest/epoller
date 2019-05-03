@@ -84,6 +84,7 @@ func (e *epoll) Add(conn net.Conn) error {
 }
 
 func (e *epoll) Remove(conn net.Conn) error {
+	defer conn.Close()
 	tcpConn := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn")
 	fdVal := tcpConn.FieldByName("fd")
 	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
