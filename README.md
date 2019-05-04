@@ -1,5 +1,5 @@
 # epoller
-epoll implementation for connections in Linux and MacOS.
+epoll implementation for connections in Linux, MacOS and windows.
 
 [![GoDoc](https://godoc.org/github.com/smallnest/epoller?status.png)](http://godoc.org/github.com/smallnest/epoller)
 
@@ -17,3 +17,5 @@ type Poller interface {
 Welcome any PRs for windows IOCompletePort.
 
 Inspired by [1m-go-websockets](https://github.com/eranyanay/1m-go-websockets).
+
+Thanks @sunnyboy00 for providing windows implementation.
