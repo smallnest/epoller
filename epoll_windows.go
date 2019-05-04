@@ -9,7 +9,6 @@ import (
 	"errors"
 
 	"net"
-	"reflect"
 	"sync"
 	"unsafe"
 )
@@ -64,12 +63,7 @@ func (e *epoll) Close() error {
 
 func (e *epoll) Add(conn net.Conn) error {
 	// Extract file descriptor associated with the connection
-
-	tcpConn := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn")
-	fdVal := tcpConn.FieldByName("fd")
-	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
-
-	fd := C.SOCKET(pfdVal.FieldByName("Sysfd").Uint())
+	fd := C.SOCKET(socketFDAsUint(conn))
 	var ev C.epoll_event
 	ev = C.set_epoll_event(C.EPOLLIN|C.EPOLLHUP, C.SOCKET(fd))
 
@@ -85,11 +79,8 @@ func (e *epoll) Add(conn net.Conn) error {
 
 func (e *epoll) Remove(conn net.Conn) error {
 	defer conn.Close()
-	tcpConn := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn")
-	fdVal := tcpConn.FieldByName("fd")
-	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
 
-	fd := C.SOCKET(pfdVal.FieldByName("Sysfd").Uint())
+	fd := C.SOCKET(socketFDAsUint(conn))
 	var ev C.epoll_event
 	err := C.epoll_ctl(e.fd, C.EPOLL_CTL_DEL, C.SOCKET(fd), &ev)
 	if err == -1 {
