@@ -20,11 +20,3 @@ func socketFD(conn net.Conn) int {
 
 	return int(pfdVal.FieldByName("Sysfd").Int())
 }
-
-func socketFDAsUint(conn net.Conn) uint64 {
-	tcpConn := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn")
-	fdVal := tcpConn.FieldByName("fd")
-	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
-
-	return pfdVal.FieldByName("Sysfd").Uint()
-}
