@@ -157,11 +157,11 @@ func (e *epoll) WaitWithBuffer() ([]net.Conn, error) {
 	return connections, nil
 }
 
-func (e *epoll) WaitChan() <-chan []net.Conn {
-	ch := make(chan []net.Conn)
+func (e *epoll) WaitChan(buffer int, count int) <-chan []net.Conn {
+	ch := make(chan []net.Conn, buffer)
 	go func() {
 		for {
-			conns, err := e.WaitWithBuffer()
+			conns, err := e.Wait(count)
 			if err != nil {
 				close(ch)
 				return
