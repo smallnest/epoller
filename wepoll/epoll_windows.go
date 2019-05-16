@@ -133,6 +133,22 @@ func (e *Epoll) WaitWithBuffer() ([]net.Conn, error) {
 	return connections, nil
 }
 
+func (e *Epoll) WaitChan() <-chan []net.Conn {
+	ch := make(chan []net.Conn)
+	go func() {
+		for {
+			conns, err := e.WaitWithBuffer()
+			if err != nil {
+				close(ch)
+				return
+			}
+
+			ch <- conns
+		}
+	}()
+	return ch
+}
+
 func socketFDAsUint(conn net.Conn) uint64 {
 	tcpConn := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn")
 	fdVal := tcpConn.FieldByName("fd")
