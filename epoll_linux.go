@@ -47,6 +47,9 @@ func NewPollerWithBuffer(count int) (Poller, error) {
 }
 
 func (e *epoll) Close() error {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
 	e.connections = nil
 	return unix.Close(e.fd)
 }

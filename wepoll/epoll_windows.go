@@ -52,6 +52,9 @@ func NewPollerWithBuffer(count int) (*Epoll, error) {
 }
 
 func (e *Epoll) Close() error {
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
 	e.connections = nil
 	i := C.epoll_close(e.fd)
 	if i == 0 {
@@ -134,7 +137,7 @@ func (e *Epoll) WaitWithBuffer() ([]net.Conn, error) {
 }
 
 func (e *Epoll) WaitChan(buffer int, count int) <-chan []net.Conn {
-	ch := make(chan []net.Conn,buffer)
+	ch := make(chan []net.Conn, buffer)
 	go func() {
 		for {
 			conns, err := e.Wait(count)
