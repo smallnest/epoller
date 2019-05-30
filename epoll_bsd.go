@@ -130,6 +130,9 @@ func (e *epoll) Wait(count int) ([]net.Conn, error) {
 	e.mu.RLock()
 	for i := 0; i < n; i++ {
 		conn := e.connections[int(events[i].Ident)]
+		if (events[i].Flags & syscall.EV_EOF) == syscall.EV_EOF {
+			conn.Close()
+		}
 		connections = append(connections, conn)
 	}
 	e.mu.RUnlock()
@@ -151,20 +154,27 @@ func (e *epoll) WaitWithBuffer() ([]net.Conn, error) {
 	e.mu.RLock()
 	for i := 0; i < n; i++ {
 		conn := e.connections[int(e.events[i].Ident)]
+		if (e.events[i].Flags & syscall.EV_EOF) == syscall.EV_EOF {
+			conn.Close()
+		}
 		connections = append(connections, conn)
 	}
 	e.mu.RUnlock()
 	return connections, nil
 }
 
-func (e *epoll) WaitChan(buffer int, count int) <-chan []net.Conn {
-	ch := make(chan []net.Conn, buffer)
+func (e *epoll) WaitChan(count int) <-chan []net.Conn {
+	ch := make(chan []net.Conn)
 	go func() {
 		for {
 			conns, err := e.Wait(count)
 			if err != nil {
 				close(ch)
 				return
+			}
+
+			if len(conns) == 0 {
+				continue
 			}
 
 			ch <- conns
