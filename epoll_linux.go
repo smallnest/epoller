@@ -82,8 +82,12 @@ func (e *epoll) Remove(conn net.Conn) error {
 func (e *epoll) Wait(count int) ([]net.Conn, error) {
 	events := make([]unix.EpollEvent, count, count)
 
+retry:
 	n, err := unix.EpollWait(e.fd, events, -1)
 	if err != nil {
+		if err == unix.EINTR {
+			goto retry
+		}
 		return nil, err
 	}
 
@@ -103,8 +107,12 @@ func (e *epoll) Wait(count int) ([]net.Conn, error) {
 }
 
 func (e *epoll) WaitWithBuffer() ([]net.Conn, error) {
+retry:
 	n, err := unix.EpollWait(e.fd, e.events, -1)
 	if err != nil {
+		if err == unix.EINTR {
+			goto retry
+		}
 		return nil, err
 	}
 

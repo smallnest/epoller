@@ -121,8 +121,12 @@ func (e *epoll) Wait(count int) ([]net.Conn, error) {
 	changes := e.changes
 	e.mu.RUnlock()
 
+retry:
 	n, err := syscall.Kevent(e.fd, changes, events, &e.ts)
-	if err != nil && err != syscall.EINTR {
+	if err != nil {
+		if err == syscall.EINTR {
+			goto retry
+		}
 		return nil, err
 	}
 
@@ -145,8 +149,12 @@ func (e *epoll) WaitWithBuffer() ([]net.Conn, error) {
 	changes := e.changes
 	e.mu.RUnlock()
 
+retry:
 	n, err := syscall.Kevent(e.fd, changes, e.events, &e.ts)
-	if err != nil && err != syscall.EINTR {
+	if err != nil {
+		if err == syscall.EINTR {
+			goto retry
+		}
 		return nil, err
 	}
 
