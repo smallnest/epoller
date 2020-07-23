@@ -57,12 +57,14 @@ func (e *epoll) Close() error {
 func (e *epoll) Add(conn net.Conn) error {
 	// Extract file descriptor associated with the connection
 	fd := socketFD(conn)
+
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
 	err := unix.EpollCtl(e.fd, syscall.EPOLL_CTL_ADD, fd, &unix.EpollEvent{Events: unix.POLLIN | unix.POLLHUP, Fd: int32(fd)})
 	if err != nil {
 		return err
 	}
-	e.lock.Lock()
-	defer e.lock.Unlock()
 	e.connections[fd] = conn
 	return nil
 }
