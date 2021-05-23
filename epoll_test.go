@@ -68,8 +68,8 @@ func TestPoller(t *testing.T) {
 				n, err := conn.Read(buf)
 				if err != nil {
 					if err == io.EOF {
-						conn.Close()
 						poller.Remove(conn)
+						conn.Close()
 					} else {
 						t.Error(err)
 					}
