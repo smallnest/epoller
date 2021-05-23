@@ -8,14 +8,13 @@ import "C"
 import (
 	"errors"
 	"reflect"
-	"unsafe"
 
 	"net"
 	"sync"
 )
 
 type Epoll struct {
-	fd          C.HANDLE
+	fd          C.uintptr_t
 	connections map[int]net.Conn
 	lock        *sync.RWMutex
 	connbuf     []net.Conn
@@ -25,7 +24,7 @@ type Epoll struct {
 func NewPoller() (*Epoll, error) {
 	fd := C.epoll_create1(0)
 
-	if unsafe.Pointer(fd) == C.NULL {
+	if fd == 0 {
 		return nil, errors.New("epoll_create1 error")
 	}
 	return &Epoll{
@@ -39,7 +38,7 @@ func NewPoller() (*Epoll, error) {
 
 func NewPollerWithBuffer(count int) (*Epoll, error) {
 	fd := C.epoll_create1(0)
-	if unsafe.Pointer(fd) == C.NULL {
+	if fd == 0 {
 		return nil, errors.New("epoll_create1 error")
 	}
 	return &Epoll{
@@ -70,19 +69,17 @@ func (e *Epoll) Add(conn net.Conn) error {
 	fd := C.SOCKET(socketFDAsUint(conn))
 	var ev C.epoll_event
 	ev = C.set_epoll_event(C.EPOLLIN|C.EPOLLHUP, C.SOCKET(fd))
-
+	e.lock.Lock()
+	defer e.lock.Unlock()
 	err := C.epoll_ctl(e.fd, C.EPOLL_CTL_ADD, C.SOCKET(fd), &ev)
 	if err == -1 {
 		return errors.New("C.EPOLL_CTL_ADD error ")
 	}
-	e.lock.Lock()
-	defer e.lock.Unlock()
 	e.connections[int(fd)] = conn
 	return nil
 }
 
 func (e *Epoll) Remove(conn net.Conn) error {
-	defer conn.Close()
 
 	fd := C.SOCKET(socketFDAsUint(conn))
 	var ev C.epoll_event
