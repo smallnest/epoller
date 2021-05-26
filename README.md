@@ -1,7 +1,8 @@
 # epoller
 epoll implementation for connections in Linux, MacOS and windows.
 
-[![GoDoc](https://godoc.org/github.com/smallnest/epoller?status.png)](http://godoc.org/github.com/smallnest/epoller)
+[![License](https://img.shields.io/:license-MIT-blue.svg)](https://opensource.org/licenses/MIT) [![GoDoc](https://godoc.org/github.com/smallnest/epoller?status.png)](http://godoc.org/github.com/smallnest/epoller)  [![travis](https://travis-ci.org/smallnest/epoller.svg?branch=master)](https://travis-ci.org/smallnest/epoller) [![Go Report Card](https://goreportcard.com/badge/github.com/smallnest/epoller)](https://goreportcard.com/report/github.com/smallnest/epoller) [![coveralls](https://coveralls.io/repos/smallnest/epoller/badge.svg?branch=master&service=github)](https://coveralls.io/github/smallnest/epoller?branch=master) 
+
 
 Its target is implementing a simple epoll for connection, so you should see it only contains few methods:
 
