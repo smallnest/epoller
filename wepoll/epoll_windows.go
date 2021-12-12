@@ -7,7 +7,7 @@ package wepoll
 import "C"
 import (
 	"errors"
-	"reflect"
+	"syscall"
 
 	"net"
 	"sync"
@@ -154,9 +154,16 @@ func (e *Epoll) WaitChan(count int) <-chan []net.Conn {
 }
 
 func socketFDAsUint(conn net.Conn) uint64 {
-	tcpConn := reflect.Indirect(reflect.ValueOf(conn)).FieldByName("conn")
-	fdVal := tcpConn.FieldByName("fd")
-	pfdVal := reflect.Indirect(fdVal).FieldByName("pfd")
-
-	return pfdVal.FieldByName("Sysfd").Uint()
+	if con, ok := conn.(syscall.Conn); ok {
+		raw, err := con.SyscallConn()
+		if err != nil {
+			return 0
+		}
+		sfd := uint64(0)
+		raw.Control(func(fd uintptr) {
+			sfd = uint64(fd)
+		})
+		return sfd
+	}
+	return 0
 }
