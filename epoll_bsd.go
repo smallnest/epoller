@@ -1,3 +1,4 @@
+//go:build darwin || netbsd || freebsd || openbsd || dragonfly
 // +build darwin netbsd freebsd openbsd dragonfly
 
 package epoller
@@ -104,7 +105,7 @@ func (e *epoll) Remove(conn net.Conn) error {
 		ident := uint64(fd)
 		for _, ke := range e.changes {
 			if ke.Ident != ident {
-				changes = append(changes)
+				changes = append(changes, ke)
 			}
 		}
 		e.changes = changes
