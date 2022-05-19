@@ -8,11 +8,14 @@ Its target is implementing a simple epoll for connection, so you should see it o
 
 ```go
 type Poller interface {
-	Add(conn net.Conn) error
-	Remove(conn net.Conn) error
-	Wait() ([]net.Conn, error)
-	Close() error
+    Add(conn net.Conn) error
+    Remove(conn net.Conn) error
+    Wait(count int) ([]net.Conn, error)
+    WaitWithBuffer() ([]net.Conn, error)
+    WaitChan(count int) <-chan []net.Conn
+    Close() error
 }
+
 ```
 
 Welcome any PRs for windows IOCompletePort.
