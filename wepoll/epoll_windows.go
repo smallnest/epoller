@@ -1,3 +1,4 @@
+//go:build windows && cgo
 // +build windows,cgo
 
 package wepoll
@@ -5,12 +6,12 @@ package wepoll
 //#cgo windows LDFLAGS: -lws2_32 -lwsock32
 //#include"wepoll.h"
 import "C"
+
 import (
 	"errors"
-	"syscall"
-
 	"net"
 	"sync"
+	"syscall"
 )
 
 type Epoll struct {
@@ -59,7 +60,6 @@ func (e *Epoll) Close() error {
 	if i == 0 {
 		return nil
 	} else {
-
 		return errors.New(" an error occurred on epoll.close ")
 	}
 }
@@ -80,7 +80,6 @@ func (e *Epoll) Add(conn net.Conn) error {
 }
 
 func (e *Epoll) Remove(conn net.Conn) error {
-
 	fd := C.SOCKET(socketFDAsUint(conn))
 	var ev C.epoll_event
 	err := C.epoll_ctl(e.fd, C.EPOLL_CTL_DEL, C.SOCKET(fd), &ev)
@@ -101,11 +100,11 @@ func (e *Epoll) Wait(count int) ([]net.Conn, error) {
 		return nil, errors.New("C.epoll_wait error")
 	}
 
-	var connections = make([]net.Conn, 0, n)
+	connections := make([]net.Conn, 0, n)
 	e.lock.RLock()
 	for i := 0; i < int(n); i++ {
 		fd := C.get_epoll_event(events[i])
-		//fmt.Println("get_epoll_event i:,fd: ", i, fd)
+		// fmt.Println("get_epoll_event i:,fd: ", i, fd)
 		conn := e.connections[int(fd)]
 		connections = append(connections, conn)
 	}
@@ -120,7 +119,7 @@ func (e *Epoll) WaitWithBuffer() ([]net.Conn, error) {
 		return nil, errors.New("WaitWithBuffer err")
 	}
 
-	var connections = e.connbuf[:0]
+	connections := e.connbuf[:0]
 	e.lock.RLock()
 	for i := 0; i < int(n); i++ {
 		fd := C.get_epoll_event(e.events[i])
@@ -164,6 +163,8 @@ func socketFDAsUint(conn net.Conn) uint64 {
 			sfd = uint64(fd)
 		})
 		return sfd
+	} else if con, ok := conn.(connImpl); ok {
+		return conn.GetFD()
 	}
 	return 0
 }

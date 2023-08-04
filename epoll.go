@@ -25,6 +25,8 @@ func socketFD(conn net.Conn) int {
 			sfd = int(fd)
 		})
 		return sfd
+	} else if con, ok := conn.(connImpl); ok {
+		return con.fd
 	}
 	return 0
 }
