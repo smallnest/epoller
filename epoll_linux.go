@@ -1,3 +1,4 @@
+//go:build linux
 // +build linux
 
 package epoller
@@ -19,17 +20,7 @@ type epoll struct {
 }
 
 func NewPoller() (Poller, error) {
-	fd, err := unix.EpollCreate1(0)
-	if err != nil {
-		return nil, err
-	}
-	return &epoll{
-		fd:          fd,
-		lock:        &sync.RWMutex{},
-		connections: make(map[int]net.Conn),
-		connbuf:     make([]net.Conn, 128, 128),
-		events:      make([]unix.EpollEvent, 128, 128),
-	}, nil
+	return NewPollerWithBuffer(128)
 }
 
 func NewPollerWithBuffer(count int) (Poller, error) {
@@ -55,6 +46,8 @@ func (e *epoll) Close() error {
 }
 
 func (e *epoll) Add(conn net.Conn) error {
+	conn = netConnToConn(conn)
+
 	// Extract file descriptor associated with the connection
 	fd := socketFD(conn)
 
@@ -93,7 +86,7 @@ retry:
 		return nil, err
 	}
 
-	var connections = make([]net.Conn, 0, n)
+	connections := make([]net.Conn, 0, n)
 	e.lock.RLock()
 	for i := 0; i < n; i++ {
 		conn := e.connections[int(events[i].Fd)]
@@ -118,7 +111,7 @@ retry:
 		return nil, err
 	}
 
-	var connections = e.connbuf[:0]
+	connections := e.connbuf[:0]
 	e.lock.RLock()
 	for i := 0; i < n; i++ {
 		conn := e.connections[int(e.events[i].Fd)]

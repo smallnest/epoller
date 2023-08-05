@@ -58,14 +58,16 @@ func TestPoller(t *testing.T) {
 
 	// read those num * msgPerConn messages, and each message (hello world) contains 11 bytes.
 	ch := make(chan struct{})
+	errs := make(chan error)
 	var total int
 	var count int
 	expected := num * msgPerConn * len("hello world")
-	go func() {
+	go func(errs chan error) {
 		for {
 			conns, err := poller.Wait(128)
 			if err != nil {
-				t.Fatal(err)
+				errs <- err // fatal errors (i.e t.Fatal()) must be reported in the main test goroutine
+				break
 			}
 			count++
 			buf := make([]byte, 1024)
@@ -89,11 +91,13 @@ func TestPoller(t *testing.T) {
 
 		t.Logf("read all %d bytes, count: %d", total, count)
 		close(ch)
-	}()
+	}(errs)
 
 	select {
 	case <-ch:
 	case <-time.After(2 * time.Second):
+	case err := <-errs:
+		t.Fatal(err)
 	}
 
 	close(done)
