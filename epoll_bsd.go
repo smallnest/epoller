@@ -10,12 +10,16 @@ import (
 	"syscall"
 )
 
+var _ Poller = (*Epoll)(nil)
+
+// Epoll is a epoll based poller.
 type Epoll struct {
-	fd      int
-	ts      syscall.Timespec
+	fd int
+	ts syscall.Timespec
+
+	mu      *sync.RWMutex
 	changes []syscall.Kevent_t
 	conns   map[int]net.Conn
-	mu      *sync.RWMutex
 	connbuf []net.Conn
 	events  []syscall.Kevent_t
 }
@@ -133,18 +137,18 @@ retry:
 		return nil, err
 	}
 
-	connections := make([]net.Conn, 0, n)
+	conns := make([]net.Conn, 0, n)
 	e.mu.RLock()
 	for i := 0; i < n; i++ {
 		conn := e.conns[int(events[i].Ident)]
 		if (events[i].Flags & syscall.EV_EOF) == syscall.EV_EOF {
 			conn.Close()
 		}
-		connections = append(connections, conn)
+		conns = append(conns, conn)
 	}
 	e.mu.RUnlock()
 
-	return connections, nil
+	return conns, nil
 }
 
 // WaitWithBuffer waits for events and returns the connections.

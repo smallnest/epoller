@@ -15,13 +15,15 @@ import (
 )
 
 type Epoll struct {
-	fd          C.uintptr_t
-	connections map[int]net.Conn
-	lock        *sync.RWMutex
-	connbuf     []net.Conn
-	events      []C.epoll_event
+	fd C.uintptr_t
+
+	lock    *sync.RWMutex
+	conns   map[int]net.Conn
+	connbuf []net.Conn
+	events  []C.epoll_event
 }
 
+// NewPoller creates a new epoll poller.
 func NewPoller() (*Epoll, error) {
 	fd := C.epoll_create1(0)
 
@@ -29,33 +31,42 @@ func NewPoller() (*Epoll, error) {
 		return nil, errors.New("epoll_create1 error")
 	}
 	return &Epoll{
-		fd:          fd,
-		lock:        &sync.RWMutex{},
-		connections: make(map[int]net.Conn),
-		connbuf:     make([]net.Conn, 128, 128),
-		events:      make([]C.epoll_event, 128, 128),
+		fd:      fd,
+		lock:    &sync.RWMutex{},
+		conns:   make(map[int]net.Conn),
+		connbuf: make([]net.Conn, 128, 128),
+		events:  make([]C.epoll_event, 128, 128),
 	}, nil
 }
 
+// NewPollerWithBuffer creates a new epoll poller with a buffer.
 func NewPollerWithBuffer(count int) (*Epoll, error) {
 	fd := C.epoll_create1(0)
 	if fd == 0 {
 		return nil, errors.New("epoll_create1 error")
 	}
 	return &Epoll{
-		fd:          fd,
-		lock:        &sync.RWMutex{},
-		connections: make(map[int]net.Conn),
-		connbuf:     make([]net.Conn, count, count),
-		events:      make([]C.epoll_event, count, count),
+		fd:      fd,
+		lock:    &sync.RWMutex{},
+		conns:   make(map[int]net.Conn),
+		connbuf: make([]net.Conn, count, count),
+		events:  make([]C.epoll_event, count, count),
 	}, nil
 }
 
-func (e *Epoll) Close() error {
+func (e *Epoll) Close(closeConns bool) error {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	e.connections = nil
+	if closeConns {
+		for _, conn := range e.conns {
+			conn.Close()
+		}
+	}
+
+	e.conns = nil
+	e.connbuf = e.connbuf[:0]
+
 	i := C.epoll_close(e.fd)
 	if i == 0 {
 		return nil
@@ -64,6 +75,7 @@ func (e *Epoll) Close() error {
 	}
 }
 
+// Add adds a connection to the poller.
 func (e *Epoll) Add(conn net.Conn) error {
 	// Extract file descriptor associated with the connection
 	fd := C.SOCKET(socketFDAsUint(conn))
@@ -79,6 +91,7 @@ func (e *Epoll) Add(conn net.Conn) error {
 	return nil
 }
 
+// Remove removes a connection from the poller.
 func (e *Epoll) Remove(conn net.Conn) error {
 	fd := C.SOCKET(socketFDAsUint(conn))
 	var ev C.epoll_event
@@ -92,8 +105,9 @@ func (e *Epoll) Remove(conn net.Conn) error {
 	return nil
 }
 
+// Wait waits for events on the connections the poller is managing.
 func (e *Epoll) Wait(count int) ([]net.Conn, error) {
-	events := make([]C.epoll_event, count, count)
+	events := make([]C.epoll_event, count)
 
 	n := C.epoll_wait(e.fd, &events[0], C.int(count), -1)
 	if n == -1 {
@@ -113,6 +127,7 @@ func (e *Epoll) Wait(count int) ([]net.Conn, error) {
 	return connections, nil
 }
 
+// WaitWithBuffer waits for events on the connections the poller is managing.
 func (e *Epoll) WaitWithBuffer() ([]net.Conn, error) {
 	n := C.epoll_wait(e.fd, &e.events[0], 128, -1)
 	if n == -1 {
@@ -132,6 +147,7 @@ func (e *Epoll) WaitWithBuffer() ([]net.Conn, error) {
 	return connections, nil
 }
 
+// WaitChan waits for events on the connections the poller is managing.
 func (e *Epoll) WaitChan(count int) <-chan []net.Conn {
 	ch := make(chan []net.Conn)
 	go func() {

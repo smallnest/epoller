@@ -12,40 +12,56 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+var _ Poller = (*Epoll)(nil)
+
+// Epoll is a epoll based poller.
 type Epoll struct {
-	fd          int
-	connections map[int]net.Conn
-	lock        *sync.RWMutex
-	connbuf     []net.Conn
-	events      []unix.EpollEvent
+	fd int
+
+	lock    *sync.RWMutex
+	conns   map[int]net.Conn
+	connbuf []net.Conn
+	events  []unix.EpollEvent
 }
 
+// NewPoller creates a new epoll poller.
 func NewPoller() (*Epoll, error) {
 	return NewPollerWithBuffer(128)
 }
 
+// NewPollerWithBuffer creates a new epoll poller with a buffer.
 func NewPollerWithBuffer(count int) (*Epoll, error) {
 	fd, err := unix.EpollCreate1(0)
 	if err != nil {
 		return nil, err
 	}
-	return &epoll{
-		fd:          fd,
-		lock:        &sync.RWMutex{},
-		connections: make(map[int]net.Conn),
-		connbuf:     make([]net.Conn, count, count),
-		events:      make([]unix.EpollEvent, count, count),
+	return &Epoll{
+		fd:      fd,
+		lock:    &sync.RWMutex{},
+		conns:   make(map[int]net.Conn),
+		connbuf: make([]net.Conn, count, count),
+		events:  make([]unix.EpollEvent, count, count),
 	}, nil
 }
 
-func (e *Epoll) Close() error {
+// Close closes the poller. If closeConns is true, it will close all the connections.
+func (e *Epoll) Close(closeConns bool) error {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	e.connections = nil
+	if closeConns {
+		for _, conn := range e.conns {
+			conn.Close()
+		}
+	}
+
+	e.conns = nil
+	e.connbuf = e.connbuf[:0]
+
 	return unix.Close(e.fd)
 }
 
+// Add adds a connection to the poller.
 func (e *Epoll) Add(conn net.Conn) error {
 	conn = newConnImpl(conn)
 	fd := socketFD(conn)
@@ -60,10 +76,11 @@ func (e *Epoll) Add(conn net.Conn) error {
 	if err != nil {
 		return err
 	}
-	e.connections[fd] = conn
+	e.conns[fd] = conn
 	return nil
 }
 
+// Remove removes a connection from the poller.
 func (e *Epoll) Remove(conn net.Conn) error {
 	fd := socketFD(conn)
 	err := unix.EpollCtl(e.fd, syscall.EPOLL_CTL_DEL, fd, nil)
@@ -72,10 +89,12 @@ func (e *Epoll) Remove(conn net.Conn) error {
 	}
 	e.lock.Lock()
 	defer e.lock.Unlock()
-	delete(e.connections, fd)
+	delete(e.conns, fd)
+
 	return nil
 }
 
+// Wait waits for at most count events and returns the connections.
 func (e *Epoll) Wait(count int) ([]net.Conn, error) {
 	events := make([]unix.EpollEvent, count, count)
 
@@ -91,7 +110,7 @@ retry:
 	connections := make([]net.Conn, 0, n)
 	e.lock.RLock()
 	for i := 0; i < n; i++ {
-		conn := e.connections[int(events[i].Fd)]
+		conn := e.conns[int(events[i].Fd)]
 		if (events[i].Events & unix.POLLHUP) == unix.POLLHUP {
 			conn.Close()
 		}
@@ -103,6 +122,7 @@ retry:
 	return connections, nil
 }
 
+// WaitWithBuffer waits for at most count events and returns the connections, with a buffered connection slice.
 func (e *Epoll) WaitWithBuffer() ([]net.Conn, error) {
 retry:
 	n, err := unix.EpollWait(e.fd, e.events, -1)
@@ -113,22 +133,23 @@ retry:
 		return nil, err
 	}
 
-	connections := e.connbuf[:0]
+	conns := e.connbuf[:0]
 	e.lock.RLock()
 	for i := 0; i < n; i++ {
-		conn := e.connections[int(e.events[i].Fd)]
+		conn := e.conns[int(e.events[i].Fd)]
 		if (e.events[i].Events & unix.POLLHUP) == unix.POLLHUP {
 			conn.Close()
 		}
-		connections = append(connections, conn)
+		conns = append(conns, conn)
 	}
 	e.lock.RUnlock()
 
-	return connections, nil
+	return conns, nil
 }
 
-func (e *Epoll) WaitChan(count int) <-chan []net.Conn {
-	ch := make(chan []net.Conn)
+// WaitChan returns a channel that you can use to receive connections.
+func (e *Epoll) WaitChan(count, chanBuffer int) <-chan []net.Conn {
+	ch := make(chan []net.Conn, chanBuffer)
 	go func() {
 		for {
 			conns, err := e.Wait(count)
