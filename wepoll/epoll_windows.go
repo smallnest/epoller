@@ -148,8 +148,8 @@ func (e *Epoll) WaitWithBuffer() ([]net.Conn, error) {
 }
 
 // WaitChan waits for events on the connections the poller is managing.
-func (e *Epoll) WaitChan(count int) <-chan []net.Conn {
-	ch := make(chan []net.Conn)
+func (e *Epoll) WaitChan(count, chanBuffer int) <-chan []net.Conn {
+	ch := make(chan []net.Conn, chanBuffer)
 	go func() {
 		for {
 			conns, err := e.Wait(count)
