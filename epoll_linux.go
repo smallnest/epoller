@@ -4,6 +4,7 @@
 package epoller
 
 import (
+	"errors"
 	"net"
 	"sync"
 	"syscall"
@@ -11,7 +12,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-type epoll struct {
+type Epoll struct {
 	fd          int
 	connections map[int]net.Conn
 	lock        *sync.RWMutex
@@ -19,11 +20,11 @@ type epoll struct {
 	events      []unix.EpollEvent
 }
 
-func NewPoller() (Poller, error) {
+func NewPoller() (*Epoll, error) {
 	return NewPollerWithBuffer(128)
 }
 
-func NewPollerWithBuffer(count int) (Poller, error) {
+func NewPollerWithBuffer(count int) (*Epoll, error) {
 	fd, err := unix.EpollCreate1(0)
 	if err != nil {
 		return nil, err
@@ -37,7 +38,7 @@ func NewPollerWithBuffer(count int) (Poller, error) {
 	}, nil
 }
 
-func (e *epoll) Close() error {
+func (e *Epoll) Close() error {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
@@ -45,11 +46,12 @@ func (e *epoll) Close() error {
 	return unix.Close(e.fd)
 }
 
-func (e *epoll) Add(conn net.Conn) error {
-	conn = netConnToConn(conn)
-
-	// Extract file descriptor associated with the connection
+func (e *Epoll) Add(conn net.Conn) error {
+	conn = newConnImpl(conn)
 	fd := socketFD(conn)
+	if e := syscall.SetNonblock(int(fd), true); e != nil {
+		return errors.New("udev: unix.SetNonblock failed")
+	}
 
 	e.lock.Lock()
 	defer e.lock.Unlock()
@@ -62,7 +64,7 @@ func (e *epoll) Add(conn net.Conn) error {
 	return nil
 }
 
-func (e *epoll) Remove(conn net.Conn) error {
+func (e *Epoll) Remove(conn net.Conn) error {
 	fd := socketFD(conn)
 	err := unix.EpollCtl(e.fd, syscall.EPOLL_CTL_DEL, fd, nil)
 	if err != nil {
@@ -74,7 +76,7 @@ func (e *epoll) Remove(conn net.Conn) error {
 	return nil
 }
 
-func (e *epoll) Wait(count int) ([]net.Conn, error) {
+func (e *Epoll) Wait(count int) ([]net.Conn, error) {
 	events := make([]unix.EpollEvent, count, count)
 
 retry:
@@ -101,7 +103,7 @@ retry:
 	return connections, nil
 }
 
-func (e *epoll) WaitWithBuffer() ([]net.Conn, error) {
+func (e *Epoll) WaitWithBuffer() ([]net.Conn, error) {
 retry:
 	n, err := unix.EpollWait(e.fd, e.events, -1)
 	if err != nil {
@@ -125,7 +127,7 @@ retry:
 	return connections, nil
 }
 
-func (e *epoll) WaitChan(count int) <-chan []net.Conn {
+func (e *Epoll) WaitChan(count int) <-chan []net.Conn {
 	ch := make(chan []net.Conn)
 	go func() {
 		for {

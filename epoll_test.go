@@ -7,23 +7,24 @@ import (
 	"net"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestPoller(t *testing.T) {
+	// connections
 	num := 10
+	// msg per connection
 	msgPerConn := 10
 
 	poller, err := NewPoller()
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// start server
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 	defer ln.Close()
+
 	go func() {
 		for {
 			conn, err := ln.Accept()
@@ -35,7 +36,6 @@ func TestPoller(t *testing.T) {
 		}
 	}()
 
-	done := make(chan struct{})
 	// create num connections and send msgPerConn messages per connection
 	for i := 0; i < num; i++ {
 		go func() {
@@ -48,8 +48,6 @@ func TestPoller(t *testing.T) {
 			for i := 0; i < msgPerConn; i++ {
 				conn.Write([]byte("hello world"))
 			}
-
-			<-done
 			conn.Close()
 		}()
 	}
@@ -57,17 +55,18 @@ func TestPoller(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	// read those num * msgPerConn messages, and each message (hello world) contains 11 bytes.
-	ch := make(chan struct{})
+	done := make(chan struct{})
 	errs := make(chan error)
 	var total int
 	var count int
+
 	expected := num * msgPerConn * len("hello world")
 	go func(errs chan error) {
 		for {
 			conns, err := poller.Wait(128)
 			if err != nil {
 				errs <- err // fatal errors (i.e t.Fatal()) must be reported in the main test goroutine
-				break
+				return
 			}
 			count++
 			buf := make([]byte, 1024)
@@ -90,17 +89,15 @@ func TestPoller(t *testing.T) {
 		}
 
 		t.Logf("read all %d bytes, count: %d", total, count)
-		close(ch)
+		close(done)
 	}(errs)
 
 	select {
-	case <-ch:
+	case <-done:
 	case <-time.After(2 * time.Second):
 	case err := <-errs:
 		t.Fatal(err)
 	}
-
-	close(done)
 
 	if total != expected {
 		t.Fatalf("epoller does not work. expect %d bytes but got %d bytes", expected, total)

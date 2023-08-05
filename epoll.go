@@ -5,13 +5,20 @@ import (
 	"syscall"
 )
 
+// Poller is the interface for epoll/kqueue poller, special for network connections.
 type Poller interface {
+	// Add adds the connection to poller.
 	Add(conn net.Conn) error
+	// Remove removes the connection from poller. Notice it doesn't call the conn.Close method.
 	Remove(conn net.Conn) error
+	// Wait waits for at most count events and returns the connections.
 	Wait(count int) ([]net.Conn, error)
+	// WaitWithBuffer waits for events with the buffered slice and returns the connections.
 	WaitWithBuffer() ([]net.Conn, error)
-	WaitChan(count int) <-chan []net.Conn
-	Close() error
+	// WaitChan waits for events and returns the connections with a channel.
+	WaitChan(count, chanBuffer int) <-chan []net.Conn
+	// Close closes the poller. If closeConns is true, it will close all the connections.
+	Close(closeConns bool) error
 }
 
 func socketFD(conn net.Conn) int {
