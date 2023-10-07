@@ -5,22 +5,23 @@ import (
 )
 
 // newConnImpl returns a net.Conn with GetFD() method.
-func newConnImpl(in net.Conn) net.Conn {
-	if _, ok := in.(connImpl); ok {
-		return in
+func newConnImpl(in net.Conn) ConnImpl {
+	if ci, ok := in.(ConnImpl); ok {
+		return ci
 	}
 
-	return connImpl{
+	return ConnImpl{
 		Conn: in,
 		fd:   socketFD(in),
 	}
 }
 
-type connImpl struct {
+// ConnImpl is a net.Conn with GetFD() method.
+type ConnImpl struct {
 	net.Conn
 	fd int
 }
 
-func (c connImpl) GetFD() int {
+func (c ConnImpl) GetFD() int {
 	return c.fd
 }

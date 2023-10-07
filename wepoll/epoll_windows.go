@@ -179,7 +179,7 @@ func socketFDAsUint(conn net.Conn) uint64 {
 			sfd = uint64(fd)
 		})
 		return sfd
-	} else if con, ok := conn.(connImpl); ok {
+	} else if con, ok := conn.(ConnImpl); ok {
 		return conn.GetFD()
 	}
 	return 0

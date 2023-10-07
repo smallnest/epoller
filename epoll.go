@@ -32,7 +32,7 @@ func socketFD(conn net.Conn) int {
 			sfd = int(fd)
 		})
 		return sfd
-	} else if con, ok := conn.(connImpl); ok {
+	} else if con, ok := conn.(ConnImpl); ok {
 		return con.fd
 	}
 	return 0
