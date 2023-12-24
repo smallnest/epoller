@@ -40,7 +40,7 @@ func newPollerWithBuffer(count int) (*Epoll, error) {
 		connBufferSize: count,
 		lock:           &sync.RWMutex{},
 		conns:          make(map[int]net.Conn),
-		connbuf:        make([]net.Conn, count, count, count),
+		connbuf:        make([]net.Conn, count, count),
 	}, nil
 }
 
@@ -109,7 +109,7 @@ retry:
 
 	var conns []net.Conn
 	if e.connBufferSize == 0 {
-		conns := make([]net.Conn, 0, n)
+		conns = make([]net.Conn, 0, n)
 	} else {
 		conns = e.connbuf[:0]
 	}
