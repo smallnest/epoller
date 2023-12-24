@@ -17,20 +17,20 @@ type Epoll struct {
 	fd int
 	ts syscall.Timespec
 
-	mu      *sync.RWMutex
-	changes []syscall.Kevent_t
-	conns   map[int]net.Conn
-	connbuf []net.Conn
-	events  []syscall.Kevent_t
+	connBufferSize int
+	mu             *sync.RWMutex
+	changes        []syscall.Kevent_t
+	conns          map[int]net.Conn
+	connbuf        []net.Conn
 }
 
 // NewPoller creates a new poller instance.
-func NewPoller() (*Epoll, error) {
-	return NewPollerWithBuffer(128)
+func NewPoller(connBufferSize int) (*Epoll, error) {
+	return newPollerWithBuffer(connBufferSize)
 }
 
-// NewPollerWithBuffer creates a new poller instance with buffer size.
-func NewPollerWithBuffer(count int) (*Epoll, error) {
+// newPollerWithBuffer creates a new poller instance with buffer size.
+func newPollerWithBuffer(count int) (*Epoll, error) {
 	p, err := syscall.Kqueue()
 	if err != nil {
 		panic(err)
@@ -45,12 +45,12 @@ func NewPollerWithBuffer(count int) (*Epoll, error) {
 	}
 
 	return &Epoll{
-		fd:      p,
-		ts:      syscall.NsecToTimespec(1e9),
-		mu:      &sync.RWMutex{},
-		conns:   make(map[int]net.Conn),
-		connbuf: make([]net.Conn, count),
-		events:  make([]syscall.Kevent_t, count),
+		fd:             p,
+		ts:             syscall.NsecToTimespec(1e9),
+		connBufferSize: count,
+		mu:             &sync.RWMutex{},
+		conns:          make(map[int]net.Conn),
+		connbuf:        make([]net.Conn, count, count),
 	}, nil
 }
 
@@ -137,66 +137,24 @@ retry:
 		return nil, err
 	}
 
-	conns := make([]net.Conn, 0, n)
+	var conns []net.Conn
+	if e.connBufferSize == 0 {
+		conns = make([]net.Conn, 0, n)
+	} else {
+		conns = e.connbuf[:0]
+	}
+
 	e.mu.RLock()
 	for i := 0; i < n; i++ {
 		conn := e.conns[int(events[i].Ident)]
-		if (events[i].Flags & syscall.EV_EOF) == syscall.EV_EOF {
-			conn.Close()
+		if conn != nil {
+			if (events[i].Flags & syscall.EV_EOF) == syscall.EV_EOF {
+				conn.Close()
+			}
+			conns = append(conns, conn)
 		}
-		conns = append(conns, conn)
 	}
 	e.mu.RUnlock()
 
 	return conns, nil
-}
-
-// WaitWithBuffer waits for events and returns the connections.
-// It uses a connection slice as buffer to reduce memory allocations.
-func (e *Epoll) WaitWithBuffer() ([]net.Conn, error) {
-	e.mu.RLock()
-	changes := e.changes
-	e.mu.RUnlock()
-
-retry:
-	n, err := syscall.Kevent(e.fd, changes, e.events, &e.ts)
-	if err != nil {
-		if err == syscall.EINTR {
-			goto retry
-		}
-		return nil, err
-	}
-
-	connections := e.connbuf[:0]
-	e.mu.RLock()
-	for i := 0; i < n; i++ {
-		conn := e.conns[int(e.events[i].Ident)]
-		if (e.events[i].Flags & syscall.EV_EOF) == syscall.EV_EOF {
-			conn.Close()
-		}
-		connections = append(connections, conn)
-	}
-	e.mu.RUnlock()
-	return connections, nil
-}
-
-// WaitChan returns a channel that you can use to receive connections.
-func (e *Epoll) WaitChan(count, chanBuffer int) <-chan []net.Conn {
-	ch := make(chan []net.Conn, chanBuffer)
-	go func() {
-		for {
-			conns, err := e.Wait(count)
-			if err != nil {
-				close(ch)
-				return
-			}
-
-			if len(conns) == 0 {
-				continue
-			}
-
-			ch <- conns
-		}
-	}()
-	return ch
 }

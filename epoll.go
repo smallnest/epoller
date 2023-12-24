@@ -13,10 +13,6 @@ type Poller interface {
 	Remove(conn net.Conn) error
 	// Wait waits for at most count events and returns the connections.
 	Wait(count int) ([]net.Conn, error)
-	// WaitWithBuffer waits for events with the buffered slice and returns the connections.
-	WaitWithBuffer() ([]net.Conn, error)
-	// WaitChan waits for events and returns the connections with a channel.
-	WaitChan(count, chanBuffer int) <-chan []net.Conn
 	// Close closes the poller. If closeConns is true, it will close all the connections.
 	Close(closeConns bool) error
 }

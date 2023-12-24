@@ -17,40 +17,25 @@ import (
 type Epoll struct {
 	fd C.uintptr_t
 
-	lock    *sync.RWMutex
-	conns   map[int]net.Conn
-	connbuf []net.Conn
-	events  []C.epoll_event
+	connBufferSize int
+	lock           *sync.RWMutex
+	conns          map[int]net.Conn
+	connbuf        []net.Conn
 }
 
 // NewPoller creates a new epoll poller.
-func NewPoller() (*Epoll, error) {
+func NewPoller(connBufferSize int) (*Epoll, error) {
 	fd := C.epoll_create1(0)
 
 	if fd == 0 {
 		return nil, errors.New("epoll_create1 error")
 	}
 	return &Epoll{
-		fd:      fd,
-		lock:    &sync.RWMutex{},
-		conns:   make(map[int]net.Conn),
-		connbuf: make([]net.Conn, 128, 128),
-		events:  make([]C.epoll_event, 128, 128),
-	}, nil
-}
-
-// NewPollerWithBuffer creates a new epoll poller with a buffer.
-func NewPollerWithBuffer(count int) (*Epoll, error) {
-	fd := C.epoll_create1(0)
-	if fd == 0 {
-		return nil, errors.New("epoll_create1 error")
-	}
-	return &Epoll{
-		fd:      fd,
-		lock:    &sync.RWMutex{},
-		conns:   make(map[int]net.Conn),
-		connbuf: make([]net.Conn, count, count),
-		events:  make([]C.epoll_event, count, count),
+		fd:             fd,
+		connBufferSize: connBufferSize,
+		lock:           &sync.RWMutex{},
+		conns:          make(map[int]net.Conn),
+		connbuf:        make([]net.Conn, connBufferSize, connBufferSize),
 	}, nil
 }
 
@@ -114,58 +99,25 @@ func (e *Epoll) Wait(count int) ([]net.Conn, error) {
 		return nil, errors.New("C.epoll_wait error")
 	}
 
-	connections := make([]net.Conn, 0, n)
+	var conns []net.Conn
+	if e.connBufferSize > 0 {
+		conns = e.connbuf[:0]
+	} else {
+		conns = make([]net.Conn, 0, n)
+	}
+
 	e.lock.RLock()
 	for i := 0; i < int(n); i++ {
 		fd := C.get_epoll_event(events[i])
-		// fmt.Println("get_epoll_event i:,fd: ", i, fd)
 		conn := e.connections[int(fd)]
-		connections = append(connections, conn)
-	}
-	e.lock.RUnlock()
-
-	return connections, nil
-}
-
-// WaitWithBuffer waits for events on the connections the poller is managing.
-func (e *Epoll) WaitWithBuffer() ([]net.Conn, error) {
-	n := C.epoll_wait(e.fd, &e.events[0], 128, -1)
-	if n == -1 {
-		return nil, errors.New("WaitWithBuffer err")
-	}
-
-	connections := e.connbuf[:0]
-	e.lock.RLock()
-	for i := 0; i < int(n); i++ {
-		fd := C.get_epoll_event(e.events[i])
-		conn := e.connections[int(fd)]
-
-		connections = append(connections, conn)
-	}
-	e.lock.RUnlock()
-
-	return connections, nil
-}
-
-// WaitChan waits for events on the connections the poller is managing.
-func (e *Epoll) WaitChan(count, chanBuffer int) <-chan []net.Conn {
-	ch := make(chan []net.Conn, chanBuffer)
-	go func() {
-		for {
-			conns, err := e.Wait(count)
-			if err != nil {
-				close(ch)
-				return
-			}
-
-			if len(conns) == 0 {
-				continue
-			}
-
-			ch <- conns
+		if conn != nil {
+			conns = append(conns, conn)
 		}
-	}()
-	return ch
+
+	}
+	e.lock.RUnlock()
+
+	return conns, nil
 }
 
 func socketFDAsUint(conn net.Conn) uint64 {

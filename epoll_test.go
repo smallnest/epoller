@@ -17,7 +17,7 @@ func TestPoller(t *testing.T) {
 	// msg per connection
 	msgPerConn := 10
 
-	poller, err := NewPoller()
+	poller, err := NewPoller(0)
 	require.NoError(t, err)
 
 	// start server
@@ -44,15 +44,19 @@ func TestPoller(t *testing.T) {
 				t.Error(err)
 				return
 			}
-			time.Sleep(200 * time.Millisecond)
+			time.Sleep(time.Second)
 			for i := 0; i < msgPerConn; i++ {
-				conn.Write([]byte("hello world"))
+				n, err := conn.Write([]byte("hello world"))
+				if err != nil {
+					t.Error(err)
+				}
+				if n != len("hello world") {
+					t.Errorf("expect to write %d bytes but got %d bytes", len("hello world"), n)
+				}
 			}
 			conn.Close()
 		}()
 	}
-
-	time.Sleep(100 * time.Millisecond)
 
 	// read those num * msgPerConn messages, and each message (hello world) contains 11 bytes.
 	done := make(chan struct{})
@@ -65,8 +69,12 @@ func TestPoller(t *testing.T) {
 		for {
 			conns, err := poller.Wait(128)
 			if err != nil {
+				t.Log(err)
 				errs <- err // fatal errors (i.e t.Fatal()) must be reported in the main test goroutine
 				return
+			}
+			if len(conns) == 0 {
+				continue
 			}
 			count++
 			buf := make([]byte, 1024)
@@ -112,7 +120,7 @@ type netPoller struct {
 func TestPoller_growstack(t *testing.T) {
 	var nps []netPoller
 	for i := 0; i < 2; i++ {
-		poller, err := NewPoller()
+		poller, err := NewPoller(128)
 		if err != nil {
 			t.Fatal(err)
 		}

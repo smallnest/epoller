@@ -18,29 +18,29 @@ var _ Poller = (*Epoll)(nil)
 type Epoll struct {
 	fd int
 
-	lock    *sync.RWMutex
-	conns   map[int]net.Conn
-	connbuf []net.Conn
-	events  []unix.EpollEvent
+	connBufferSize int
+	lock           *sync.RWMutex
+	conns          map[int]net.Conn
+	connbuf        []net.Conn
 }
 
 // NewPoller creates a new epoll poller.
-func NewPoller() (*Epoll, error) {
-	return NewPollerWithBuffer(128)
+func NewPoller(connBufferSize int) (*Epoll, error) {
+	return newPollerWithBuffer(connBufferSize)
 }
 
-// NewPollerWithBuffer creates a new epoll poller with a buffer.
-func NewPollerWithBuffer(count int) (*Epoll, error) {
+// newPollerWithBuffer creates a new epoll poller with a buffer.
+func newPollerWithBuffer(count int) (*Epoll, error) {
 	fd, err := unix.EpollCreate1(0)
 	if err != nil {
 		return nil, err
 	}
 	return &Epoll{
-		fd:      fd,
-		lock:    &sync.RWMutex{},
-		conns:   make(map[int]net.Conn),
-		connbuf: make([]net.Conn, count, count),
-		events:  make([]unix.EpollEvent, count, count),
+		fd:             fd,
+		connBufferSize: count,
+		lock:           &sync.RWMutex{},
+		conns:          make(map[int]net.Conn),
+		connbuf:        make([]net.Conn, count, count, count),
 	}, nil
 }
 
@@ -107,62 +107,24 @@ retry:
 		return nil, err
 	}
 
-	connections := make([]net.Conn, 0, n)
+	var conns []net.Conn
+	if e.connBufferSize == 0 {
+		conns := make([]net.Conn, 0, n)
+	} else {
+		conns = e.connbuf[:0]
+	}
 	e.lock.RLock()
 	for i := 0; i < n; i++ {
 		conn := e.conns[int(events[i].Fd)]
-		if (events[i].Events & unix.POLLHUP) == unix.POLLHUP {
-			conn.Close()
+		if conn != nil {
+			if (events[i].Events & unix.POLLHUP) == unix.POLLHUP {
+				conn.Close()
+			}
+
+			conns = append(conns, conn)
 		}
-
-		connections = append(connections, conn)
-	}
-	e.lock.RUnlock()
-
-	return connections, nil
-}
-
-// WaitWithBuffer waits for at most count events and returns the connections, with a buffered connection slice.
-func (e *Epoll) WaitWithBuffer() ([]net.Conn, error) {
-retry:
-	n, err := unix.EpollWait(e.fd, e.events, -1)
-	if err != nil {
-		if err == unix.EINTR {
-			goto retry
-		}
-		return nil, err
-	}
-
-	conns := e.connbuf[:0]
-	e.lock.RLock()
-	for i := 0; i < n; i++ {
-		conn := e.conns[int(e.events[i].Fd)]
-		if (e.events[i].Events & unix.POLLHUP) == unix.POLLHUP {
-			conn.Close()
-		}
-		conns = append(conns, conn)
 	}
 	e.lock.RUnlock()
 
 	return conns, nil
-}
-
-// WaitChan returns a channel that you can use to receive connections.
-func (e *Epoll) WaitChan(count, chanBuffer int) <-chan []net.Conn {
-	ch := make(chan []net.Conn, chanBuffer)
-	go func() {
-		for {
-			conns, err := e.Wait(count)
-			if err != nil {
-				close(ch)
-				return
-			}
-			if len(conns) == 0 {
-				continue
-			}
-
-			ch <- conns
-		}
-	}()
-	return ch
 }
