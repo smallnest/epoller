@@ -148,9 +148,11 @@ retry:
 	for i := 0; i < n; i++ {
 		conn := e.conns[int(events[i].Ident)]
 		if conn != nil {
-			if (events[i].Flags & syscall.EV_EOF) == syscall.EV_EOF {
-				conn.Close()
-			}
+			// issue #11: don't close the connection here because maybe data need to drain
+			//
+			// if (events[i].Flags & syscall.EV_EOF) == syscall.EV_EOF {
+			// 	conn.Close()
+			// }
 			conns = append(conns, conn)
 		}
 	}
