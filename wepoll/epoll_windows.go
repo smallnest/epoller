@@ -72,7 +72,7 @@ func (e *Epoll) Add(conn net.Conn) error {
 	if err == -1 {
 		return errors.New("C.EPOLL_CTL_ADD error ")
 	}
-	e.connections[int(fd)] = conn
+	e.conns[int(fd)] = conn
 	return nil
 }
 
@@ -86,7 +86,7 @@ func (e *Epoll) Remove(conn net.Conn) error {
 	}
 	e.lock.Lock()
 	defer e.lock.Unlock()
-	delete(e.connections, int(fd))
+	delete(e.conns, int(fd))
 	return nil
 }
 
@@ -109,7 +109,7 @@ func (e *Epoll) Wait(count int) ([]net.Conn, error) {
 	e.lock.RLock()
 	for i := 0; i < int(n); i++ {
 		fd := C.get_epoll_event(events[i])
-		conn := e.connections[int(fd)]
+		conn := e.conns[int(fd)]
 		if conn != nil {
 			conns = append(conns, conn)
 		}
@@ -131,8 +131,6 @@ func socketFDAsUint(conn net.Conn) uint64 {
 			sfd = uint64(fd)
 		})
 		return sfd
-	} else if con, ok := conn.(ConnImpl); ok {
-		return conn.GetFD()
 	}
 	return 0
 }
