@@ -148,7 +148,7 @@ retry:
 	for i := 0; i < n; i++ {
 		conn := e.conns[int(events[i].Ident)]
 		if conn != nil {
-			// issue #11: don't close the connection here because maybe data need to drain
+			// issue #11: don't close the connection here because maybe data needs to drain
 			//
 			// if (events[i].Flags & syscall.EV_EOF) == syscall.EV_EOF {
 			// 	conn.Close()
@@ -159,4 +159,8 @@ retry:
 	e.mu.RUnlock()
 
 	return conns, nil
+}
+
+func (e *Epoll) Size() int {
+	return len(e.conns)
 }

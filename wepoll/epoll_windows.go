@@ -134,3 +134,7 @@ func socketFDAsUint(conn net.Conn) uint64 {
 	}
 	return 0
 }
+
+func (e *Epoll) Size() int {
+	return len(e.conns)
+}
