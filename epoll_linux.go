@@ -69,13 +69,14 @@ func (e *Epoll) Add(conn net.Conn) error {
 		return errors.New("udev: unix.SetNonblock failed")
 	}
 
-	e.lock.Lock()
-	defer e.lock.Unlock()
-
 	err := unix.EpollCtl(e.fd, syscall.EPOLL_CTL_ADD, fd, &unix.EpollEvent{Events: unix.POLLIN | unix.POLLHUP, Fd: int32(fd)})
 	if err != nil {
 		return err
 	}
+
+	e.lock.Lock()
+	defer e.lock.Unlock()
+
 	e.conns[fd] = conn
 	return nil
 }
@@ -87,6 +88,7 @@ func (e *Epoll) Remove(conn net.Conn) error {
 	if err != nil {
 		return err
 	}
+
 	e.lock.Lock()
 	defer e.lock.Unlock()
 	delete(e.conns, fd)
@@ -117,9 +119,11 @@ retry:
 	for i := 0; i < n; i++ {
 		conn := e.conns[int(events[i].Fd)]
 		if conn != nil {
-			if (events[i].Events & unix.POLLHUP) == unix.POLLHUP {
-				conn.Close()
-			}
+			// issue #11: don't close the connection here because maybe data needs to drain
+			//
+			// if (events[i].Events & unix.POLLHUP) == unix.POLLHUP {
+			// 	conn.Close()
+			// }
 
 			conns = append(conns, conn)
 		}
@@ -127,4 +131,8 @@ retry:
 	e.lock.RUnlock()
 
 	return conns, nil
+}
+
+func (e *Epoll) Size() int {
+	return len(e.conns)
 }
