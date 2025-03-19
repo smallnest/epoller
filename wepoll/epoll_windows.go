@@ -136,5 +136,8 @@ func socketFDAsUint(conn net.Conn) uint64 {
 }
 
 func (e *Epoll) Size() int {
+	e.lock.RLock()
+	defer e.lock.RUnlock()
+
 	return len(e.conns)
 }
