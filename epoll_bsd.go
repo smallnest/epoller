@@ -162,5 +162,7 @@ retry:
 }
 
 func (e *Epoll) Size() int {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
 	return len(e.conns)
 }
